@@ -1,0 +1,11 @@
+# The dsh-mcp-json bundle patch: mounts the mcp.json loader into any profile
+# that installs this package. Applied after the profile's other bundle layers,
+# so the user's own `cordis.patch.yml` still outranks this row by id.
+#
+# No paths are inlined. The defaults — `~/.dsh/mcp.json` plus the project's
+# `.mcp.json` and `.dsh/mcp.json` — are what the Claude-family tools already
+# write, so an existing configuration works with no entry config at all.
+
+- insert:
+    - id: mcp-json
+      name: dsh-mcp-json
