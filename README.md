@@ -60,6 +60,30 @@ The harness's own document sits at the end of each group, so it can override a b
 
 Relaxed JSON is accepted — `//` and `/* */` comments and trailing commas — because every tool in the table writes it and real files carry it.
 
+## Collecting the borrowed servers into one document
+
+If you would rather own your MCP configuration outright than keep reading four other tools' files, import once and stop borrowing:
+
+```sh
+dsh-mcp-json-import --dry-run   # see what would be written
+dsh-mcp-json-import             # write ~/.dsh/mcp.json
+```
+
+Then set `borrow: false` in the `mcp-json` section of `~/.dsh/settings.yaml`. Discovery narrows to `~/.dsh/mcp.json` and `<cwd>/.dsh/mcp.json`, the file is yours, and nothing rewrites it.
+
+| Flag | Meaning |
+|---|---|
+| `--target <path>` | Document to write, default `~/.dsh/mcp.json`. |
+| `--cwd <path>` | Project directory the project-level layers resolve against. |
+| `--force` | Overwrite entries the target already defines. Without it, yours are kept. |
+| `--dry-run` | Report what would change and write nothing. |
+
+Entries are translated to the Claude vocabulary on the way in, so an OpenCode or Codex server arrives as `command` plus `args`. Names the target already defines are kept rather than replaced, because the entry you wrote is the more specific statement about that server. Other top-level keys in the target survive: only the `mcpServers` section is claimed.
+
+This is a command you run, not something the plugin does on its own, and that is the whole design. A document rewritten from the other tools on every start cannot also be a document you edit — your additions would be overwritten, and a borrowed server you deleted would reappear on the next reconcile. Importing once leaves the file yours afterwards.
+
+Note that importing copies entries; it does not change which layer wins. A project `.mcp.json` still outranks `~/.dsh/mcp.json`, which is why turning `borrow` off is the second half of the instruction rather than optional polish.
+
 ## Dialects
 
 The three vocabularies describe the same servers with different field names, and this plugin translates them rather than asking you to rewrite anything:

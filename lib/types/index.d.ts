@@ -19,6 +19,8 @@ import z from '@deepseek-ai/schemastery';
 export { DEFAULT_USER_PATH, discover, ensureDocument, expandHome, layerSources, readLayer } from './discover.ts';
 export type { Discovery, LayerResult, LayerSource } from './discover.ts';
 export { normalizeDocument } from './dialect.ts';
+export { mergeServers, runImport } from './import.ts';
+export type { ImportDecision, ImportReport, MergeResult } from './import.ts';
 export { isDisabled, McpJsonEntryError, toClientConfig } from './map.ts';
 export { parseJsonc, stripJsonExtras } from './parse.ts';
 export type * from './types.ts';

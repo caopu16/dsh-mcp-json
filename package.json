@@ -30,9 +30,13 @@
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
+  "bin": {
+    "dsh-mcp-json-import": "lib/cli.js"
+  },
   "files": [
     "lib/index.js",
     "lib/invariant.js",
+    "lib/cli.js",
     "lib/types/**/*.d.ts",
     "cordis.patch.yml",
     "README.md",
