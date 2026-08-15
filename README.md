@@ -79,9 +79,18 @@ An entry that names no transport is inferred: a `url` means HTTP, otherwise stdi
 
 ## Config
 
-Every field is optional, and the defaults need no configuration at all:
+Every field is optional, and the defaults need no configuration at all.
 
-To change one, patch the row by id in `~/.dsh/profiles/<name>/cordis.patch.yml`:
+To change one, write the `mcp-json` section of `~/.dsh/settings.yaml`:
+
+```yaml
+mcp-json:
+  borrow: false
+```
+
+This is the place to put it. The section merges over whatever the profile composed, so setting one field leaves the rest alone, and an edit takes effect without a restart.
+
+A patch layer works too, targeting the row by id in `~/.dsh/profiles/<name>/cordis.patch.yml`:
 
 ```yaml
 - id: mcp-json
@@ -89,7 +98,7 @@ To change one, patch the row by id in `~/.dsh/profiles/<name>/cordis.patch.yml`:
     borrow: false
 ```
 
-That entry targets the existing row by id. Do not wrap it in an `insert:` list — this package's own patch layer already inserts `mcp-json`, and a second insert of the same id fails the whole profile at boot with `duplicate loader entry id: mcp-json`.
+Two things to know about the patch route. A patch replaces the row's whole `config` rather than merging into it, so a patch that sets one field drops every other field back to its schema default. And do not wrap the entry in an `insert:` list — this package's own patch layer already inserts `mcp-json`, and a second insert of the same id fails the whole profile at boot with `duplicate loader entry id: mcp-json`.
 
 | Field | Default | Meaning |
 |---|---|---|
@@ -105,6 +114,8 @@ That entry targets the existing row by id. Do not wrap it in an `insert:` list �
 A changed file is reconciled **per server**, not by remounting everything: a server whose resolved configuration is unchanged keeps its connection and its registered tools while its neighbours change. Adding an entry mounts one server, removing or disabling one unmounts it, and editing one replaces just that server.
 
 An editor writes a document as several operations, so events are coalesced over `debounceMs` before the files are re-read.
+
+Editing the `mcp-json` settings section reconciles the same way: the config is compared as the paths and switches it resolves to, so a change that moves `cwd` or turns `borrow` off re-reads the new layer set, while a section that only restates a default disturbs nothing.
 
 ## Tool names
 

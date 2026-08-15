@@ -21,6 +21,7 @@ import type { FSWatcher } from 'chokidar'
 import type { Context, Fiber } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import * as McpClient from '@deepseek-ai/dsh-mcp-client'
+import { deepEqualJson, installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 // Side-effect type import: declaration-merges `ctx.tools` onto Context.
 import type {} from '@deepseek-ai/dsh-tools'
 import { DEFAULT_USER_PATH, discover, ensureDocument, expandHome, layerSources } from './discover.ts'
@@ -35,6 +36,16 @@ export type * from './types.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'mcp-json'
+
+/**
+ * Settings namespace carrying this plugin's user layer.
+ *
+ * A patch layer replaces the loader row's whole `config`, so overriding one
+ * field there silently drops the rest back to schema defaults. The settings
+ * section merges over the composed entry instead, and reloads without a
+ * restart, which makes it the better place for a user to set these.
+ */
+export const MCP_JSON_SETTINGS_NAMESPACE = settingsNamespace('mcp-json')
 
 /**
  * The MCP client registers on `ctx.tools`, so this plugin waits for the same
@@ -92,13 +103,48 @@ interface Mounted {
   signature: string
 }
 
-export function apply(ctx: Context, config: Config): void {
+/** The config projected onto the facts this plugin acts on. */
+export interface Resolved {
+  /** Absolute path of the harness's own user document. */
+  userPath: string
+  /** Absolute project directory the project layers resolve against. */
+  cwd: string
+  borrow: boolean
+  createUserPath: boolean
+  watch: boolean
+  debounceMs: number
+  /** Every document to watch, in discovery order. */
+  paths: string[]
+}
+
+/**
+ * Project a config onto the resolved facts, so a settings change is compared
+ * as what this plugin actually does rather than as raw fields.
+ * @param config - composed entry merged with the user's settings section.
+ * @returns the absolute paths and switches discovery and watching need.
+ */
+export function resolveConfig(config: Config): Resolved {
   const cwd = config.cwd ?? process.cwd()
   const expanded = expandHome(config.userPath ?? DEFAULT_USER_PATH)
   const userPath = isAbsolute(expanded) ? expanded : resolve(cwd, expanded)
   const borrow = config.borrow ?? true
-  const debounceMs = config.debounceMs ?? DEFAULT_DEBOUNCE_MS
+  return {
+    userPath,
+    cwd,
+    borrow,
+    createUserPath: config.createUserPath !== false,
+    watch: config.watch !== false,
+    debounceMs: config.debounceMs ?? DEFAULT_DEBOUNCE_MS,
+    paths: layerSources(userPath, cwd, borrow).map(source => source.path),
+  }
+}
+
+export function apply(ctx: Context, config: Config): void {
+  let current: () => Config = () => config
+  let active = resolveConfig(config)
   const mounted = new Map<string, Mounted>()
+  /** Documents this fiber has already tried to create, so it tries once each. */
+  const ensured = new Set<string>()
 
   /**
    * Bring the mounted set in line with the documents.
@@ -108,6 +154,7 @@ export function apply(ctx: Context, config: Config): void {
    * and the user needs the remaining servers to keep working while they fix it.
    */
   const reconcile = async (): Promise<void> => {
+    const { userPath, cwd, borrow } = active
     const { layers, servers } = await discover(userPath, cwd, borrow)
     for (const layer of layers) {
       if (layer.failure !== undefined) {
@@ -166,8 +213,13 @@ export function apply(ctx: Context, config: Config): void {
 
   let timer: ReturnType<typeof setTimeout> | undefined
   let watcher: FSWatcher | undefined
-  if (config.watch !== false) {
-    watcher = chokidarWatch(layerSources(userPath, cwd, borrow).map(source => source.path), { ignoreInitial: true })
+
+  /** Watch the active layer set, replacing any watcher over the previous one. */
+  const rewatch = (): void => {
+    void watcher?.close()
+    watcher = undefined
+    if (!active.watch) return
+    watcher = chokidarWatch(active.paths, { ignoreInitial: true })
     watcher.on('all', () => {
       // An editor writes a document as several operations; the quiet period
       // keeps that from mounting servers against a half-written file.
@@ -175,7 +227,7 @@ export function apply(ctx: Context, config: Config): void {
       timer = setTimeout(() => {
         timer = undefined
         void enqueue()
-      }, debounceMs)
+      }, active.debounceMs)
     })
     watcher.on('error', (error: unknown) => {
       ctx.logger.warn('mcp-json: watcher error')
@@ -183,16 +235,16 @@ export function apply(ctx: Context, config: Config): void {
     })
   }
 
-  ctx.effect(() => () => {
-    closed = true
-    if (timer !== undefined) clearTimeout(timer)
-    void watcher?.close()
-    // Child fibers dispose with this one, so the map is only cleared here;
-    // disposing them individually would race Cordis doing the same.
-    mounted.clear()
-  }, 'mcp-json.watch')
-
-  if (config.createUserPath !== false) {
+  /**
+   * Create the harness's own document when it is absent, once per path this
+   * fiber has seen: a settings change that points `userPath` somewhere new
+   * should create that document too, but retrying a path whose write already
+   * failed would repeat the same warning on every reload.
+   */
+  const ensureCurrent = (): void => {
+    const { userPath, createUserPath } = active
+    if (!createUserPath || ensured.has(userPath)) return
+    ensured.add(userPath)
     operations = operations.then(async () => {
       if (closed) return
       try {
@@ -208,5 +260,38 @@ export function apply(ctx: Context, config: Config): void {
     })
   }
 
+  ctx.effect(() => () => {
+    closed = true
+    if (timer !== undefined) clearTimeout(timer)
+    void watcher?.close()
+    // Child fibers dispose with this one, so the map is only cleared here;
+    // disposing them individually would race Cordis doing the same.
+    mounted.clear()
+  }, 'mcp-json.watch')
+
+  /**
+   * Adopt the currently authoritative config. Compared as resolved facts, so a
+   * settings edit that changes nothing this plugin reads — or one that only
+   * restates a default — does not disturb a single connected server.
+   */
+  const adopt = (): void => {
+    const next = resolveConfig(current())
+    if (deepEqualJson(next, active)) return
+    active = next
+    rewatch()
+    ensureCurrent()
+    void enqueue()
+  }
+
+  rewatch()
+  ensureCurrent()
   void enqueue()
+
+  // Installed after the composed config is already live, so `adopt` only ever
+  // reacts to a difference: attaching a settings section that restates the
+  // entry leaves the servers mounted above untouched.
+  installSettingsSection(ctx, MCP_JSON_SETTINGS_NAMESPACE, Config, config, {
+    setSource: (source) => { current = source },
+    onChange: adopt,
+  })
 }

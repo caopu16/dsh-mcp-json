@@ -79,9 +79,18 @@ harness 自己的文档位于每组末尾,所以它能覆盖借来的配置,而�
 
 ## 配置
 
-所有字段都是可选的,默认值无需任何配置:
+所有字段都是可选的,默认值无需任何配置。
 
-要改其中某项,在 `~/.dsh/profiles/<名称>/cordis.patch.yml` 里按 id 给这一行打补丁:
+要改其中某项,写 `~/.dsh/settings.yaml` 的 `mcp-json` 段:
+
+```yaml
+mcp-json:
+  borrow: false
+```
+
+推荐写在这里。该 section 会叠加在 profile 组装出的配置之上,所以只写一个字段不会影响其余字段,而且改完无需重启即刻生效。
+
+也可以走 patch 层,在 `~/.dsh/profiles/<名称>/cordis.patch.yml` 里按 id 命中这一行:
 
 ```yaml
 - id: mcp-json
@@ -89,7 +98,7 @@ harness 自己的文档位于每组末尾,所以它能覆盖借来的配置,而�
     borrow: false
 ```
 
-这条配置是按 id 命中已存在的行。**不要**把它包在 `insert:` 列表里——本包自带的 patch 层已经 insert 了 `mcp-json`,同一个 id 再 insert 一次会让整个 profile 启动失败,报 `duplicate loader entry id: mcp-json`。
+走 patch 有两点要注意。patch 是整体替换该行的 `config`,不是合并进去,所以只写一个字段会让其余字段全部退回 schema 默认值。另外**不要**把它包在 `insert:` 列表里——本包自带的 patch 层已经 insert 了 `mcp-json`,同一个 id 再 insert 一次会让整个 profile 启动失败,报 `duplicate loader entry id: mcp-json`。
 
 | 字段 | 默认值 | 含义 |
 |---|---|---|
@@ -105,6 +114,8 @@ harness 自己的文档位于每组末尾,所以它能覆盖借来的配置,而�
 文件变化是**按 server 逐台**调和的,不是整体重挂:解析后配置未变的 server 会保住自己的连接和已注册工具,而邻居照常变更。新增一个条目只挂一台,删除或禁用一个只卸一台,修改一个只替换那一台。
 
 编辑器写文件是多次操作,所以事件会在 `debounceMs` 内合并后才重新读取。
+
+改 `mcp-json` settings 段走的是同一套调和:配置按它解析出的路径与开关来比较,所以挪动 `cwd` 或关掉 `borrow` 会重读新的层集合,而只是把默认值重写一遍的 section 不会惊动任何东西。
 
 ## 工具名
 

@@ -25,6 +25,15 @@ export type * from './types.ts';
 /** Cordis plugin name used by loader diagnostics. */
 export declare const name = "mcp-json";
 /**
+ * Settings namespace carrying this plugin's user layer.
+ *
+ * A patch layer replaces the loader row's whole `config`, so overriding one
+ * field there silently drops the rest back to schema defaults. The settings
+ * section merges over the composed entry instead, and reloads without a
+ * restart, which makes it the better place for a user to set these.
+ */
+export declare const MCP_JSON_SETTINGS_NAMESPACE: import("@deepseek-ai/dsh-settings").SettingsNamespace;
+/**
  * The MCP client registers on `ctx.tools`, so this plugin waits for the same
  * service before mounting anything: a child mounted without it would fail on
  * its own rather than wait.
@@ -60,4 +69,24 @@ export interface Config {
     debounceMs?: number;
 }
 export declare const Config: z<Config>;
+/** The config projected onto the facts this plugin acts on. */
+export interface Resolved {
+    /** Absolute path of the harness's own user document. */
+    userPath: string;
+    /** Absolute project directory the project layers resolve against. */
+    cwd: string;
+    borrow: boolean;
+    createUserPath: boolean;
+    watch: boolean;
+    debounceMs: number;
+    /** Every document to watch, in discovery order. */
+    paths: string[];
+}
+/**
+ * Project a config onto the resolved facts, so a settings change is compared
+ * as what this plugin actually does rather than as raw fields.
+ * @param config - composed entry merged with the user's settings section.
+ * @returns the absolute paths and switches discovery and watching need.
+ */
+export declare function resolveConfig(config: Config): Resolved;
 export declare function apply(ctx: Context, config: Config): void;
