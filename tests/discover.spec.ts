@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { discover, layerSources, readLayer } from '../src/discover.ts'
+import { discover, ensureDocument, layerSources, readLayer } from '../src/discover.ts'
 
 let root: string
 
@@ -48,6 +48,22 @@ describe('layerSources', () => {
   it('resolves a relative user path against the project directory', () => {
     const sources = layerSources('custom.json', '/proj', false)
     expect(sources[0]?.path).toBe('/proj/custom.json')
+  })
+})
+
+describe('ensureDocument', () => {
+  it('creates a parsable empty document, parents included', async () => {
+    const path = join(root, 'nested/.dsh/mcp.json')
+    expect(await ensureDocument(path)).toBe(path)
+    const result = await readLayer({ path, dialect: 'claude', tool: 'dsh' })
+    expect(result.servers).toEqual([])
+    expect(result.failure).toBeUndefined()
+  })
+
+  it('leaves an existing document untouched', async () => {
+    const path = write('mcp.json', { mcpServers: { a: { command: 'x' } } })
+    expect(await ensureDocument(path)).toBeUndefined()
+    expect(readFileSync(path, 'utf8')).toBe(JSON.stringify({ mcpServers: { a: { command: 'x' } } }))
   })
 })
 

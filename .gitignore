@@ -8,6 +8,7 @@ lib/*.tsbuildinfo
 lib/types/*.tsbuildinfo
 
 node_modules/
+.memsearch/
 *.tgz
 *.log
 .DS_Store

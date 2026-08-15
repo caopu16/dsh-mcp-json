@@ -96,6 +96,7 @@ harness 自己的文档位于每组末尾,所以它能覆盖借来的配置,而�
 | `userPath` | `~/.dsh/mcp.json` | 本 harness 自己的用户级文档。 |
 | `cwd` | 进程工作目录 | 项目级各层解析时的基准目录。 |
 | `borrow` | `true` | 是否读取其他工具的文件。设为 `false` 时只读 `userPath` 与 `<cwd>/.dsh/mcp.json`。 |
+| `createUserPath` | `true` | `userPath` 不存在时创建一份 `mcpServers` 为空的文档，保证有文件可编辑。已存在的文件绝不会被改写。 |
 | `watch` | `true` | 任意层变化时重新加载。 |
 | `debounceMs` | `150` | 文件事件后再次读取前的静默期。 |
 

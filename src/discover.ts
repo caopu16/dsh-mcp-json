@@ -16,9 +16,9 @@
  * @module dsh-mcp-json/discover
  */
 
-import { readFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { parse as parseToml } from 'smol-toml'
 import { normalizeDocument } from './dialect.ts'
 import { parseJsonc } from './parse.ts'
@@ -99,6 +99,30 @@ export async function readLayer(source: LayerSource): Promise<LayerResult> {
     ...source,
     servers: Object.entries(entries).map(([name, entry]) => ({ name, entry, source: source.path })),
   }
+}
+
+/** Contents written for a document that does not exist yet. */
+const EMPTY_DOCUMENT = '{\n  "mcpServers": {}\n}\n'
+
+/**
+ * Create the harness's own user-level document when it is absent, so the file
+ * to edit is always on disk.
+ *
+ * Written with `wx`: an existing document is never rewritten, and the check and
+ * the write are one operation, so a concurrently started process cannot clobber
+ * servers the other just wrote.
+ * @param path - absolute path of the document to create.
+ * @returns the path when this call created it, `undefined` when it already existed.
+ */
+export async function ensureDocument(path: string): Promise<string | undefined> {
+  await mkdir(dirname(path), { recursive: true })
+  try {
+    await writeFile(path, EMPTY_DOCUMENT, { flag: 'wx' })
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return undefined
+    throw error
+  }
+  return path
 }
 
 /** Expand a leading `~` against the user's home directory. */

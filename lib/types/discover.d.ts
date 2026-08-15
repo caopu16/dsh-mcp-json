@@ -40,6 +40,17 @@ export interface LayerResult extends LayerSource {
  * @returns the layer's servers, or a failure describing why it was skipped.
  */
 export declare function readLayer(source: LayerSource): Promise<LayerResult>;
+/**
+ * Create the harness's own user-level document when it is absent, so the file
+ * to edit is always on disk.
+ *
+ * Written with `wx`: an existing document is never rewritten, and the check and
+ * the write are one operation, so a concurrently started process cannot clobber
+ * servers the other just wrote.
+ * @param path - absolute path of the document to create.
+ * @returns the path when this call created it, `undefined` when it already existed.
+ */
+export declare function ensureDocument(path: string): Promise<string | undefined>;
 /** Expand a leading `~` against the user's home directory. */
 export declare function expandHome(path: string): string;
 /**

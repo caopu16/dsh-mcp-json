@@ -96,6 +96,7 @@ That entry targets the existing row by id. Do not wrap it in an `insert:` list â
 | `userPath` | `~/.dsh/mcp.json` | This harness's own user-level document. |
 | `cwd` | the process working directory | Directory the project-level layers resolve against. |
 | `borrow` | `true` | Whether to read the other tools' files. `false` restricts discovery to `userPath` and `<cwd>/.dsh/mcp.json`. |
+| `createUserPath` | `true` | Create `userPath` with an empty `mcpServers` when absent, so the document to edit always exists. An existing file is never rewritten. |
 | `watch` | `true` | Reload when any layer changes. |
 | `debounceMs` | `150` | Quiet period after a file event before re-reading. |
 

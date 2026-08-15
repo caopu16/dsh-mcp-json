@@ -15,6 +15,7 @@
  * @module dsh-mcp-json
  */
 
+import { isAbsolute, resolve } from 'node:path'
 import { watch as chokidarWatch } from 'chokidar'
 import type { FSWatcher } from 'chokidar'
 import type { Context, Fiber } from '@deepseek-ai/cordis'
@@ -22,10 +23,10 @@ import z from '@deepseek-ai/schemastery'
 import * as McpClient from '@deepseek-ai/dsh-mcp-client'
 // Side-effect type import: declaration-merges `ctx.tools` onto Context.
 import type {} from '@deepseek-ai/dsh-tools'
-import { DEFAULT_USER_PATH, discover, expandHome, layerSources } from './discover.ts'
+import { DEFAULT_USER_PATH, discover, ensureDocument, expandHome, layerSources } from './discover.ts'
 import { isDisabled, McpJsonEntryError, toClientConfig } from './map.ts'
 
-export { DEFAULT_USER_PATH, discover, expandHome, layerSources, readLayer } from './discover.ts'
+export { DEFAULT_USER_PATH, discover, ensureDocument, expandHome, layerSources, readLayer } from './discover.ts'
 export type { Discovery, LayerResult, LayerSource } from './discover.ts'
 export { normalizeDocument } from './dialect.ts'
 export { isDisabled, McpJsonEntryError, toClientConfig } from './map.ts'
@@ -63,6 +64,12 @@ export interface Config {
    * discovery to `userPath` and `<cwd>/.dsh/mcp.json`.
    */
   borrow?: boolean
+  /**
+   * Whether to create `userPath` with an empty `mcpServers` when it is absent,
+   * so the document to edit always exists (default true). Only this path is
+   * created: the other layers belong to other tools or to a checkout.
+   */
+  createUserPath?: boolean
   /** Whether to reload when a document changes (default true). */
   watch?: boolean
   /** Quiet period after a file event before re-reading (default 150ms). */
@@ -73,6 +80,7 @@ export const Config: z<Config> = z.object({
   userPath: z.string().default(DEFAULT_USER_PATH),
   cwd: z.string(),
   borrow: z.boolean().default(true),
+  createUserPath: z.boolean().default(true),
   watch: z.boolean().default(true),
   debounceMs: z.number().min(0).default(DEFAULT_DEBOUNCE_MS),
 })
@@ -85,8 +93,9 @@ interface Mounted {
 }
 
 export function apply(ctx: Context, config: Config): void {
-  const userPath = expandHome(config.userPath ?? DEFAULT_USER_PATH)
   const cwd = config.cwd ?? process.cwd()
+  const expanded = expandHome(config.userPath ?? DEFAULT_USER_PATH)
+  const userPath = isAbsolute(expanded) ? expanded : resolve(cwd, expanded)
   const borrow = config.borrow ?? true
   const debounceMs = config.debounceMs ?? DEFAULT_DEBOUNCE_MS
   const mounted = new Map<string, Mounted>()
@@ -182,6 +191,22 @@ export function apply(ctx: Context, config: Config): void {
     // disposing them individually would race Cordis doing the same.
     mounted.clear()
   }, 'mcp-json.watch')
+
+  if (config.createUserPath !== false) {
+    operations = operations.then(async () => {
+      if (closed) return
+      try {
+        if (await ensureDocument(userPath) !== undefined) {
+          ctx.logger.info(`mcp-json: created ${userPath}`)
+        }
+      } catch (error: unknown) {
+        // A home directory that refuses the write still leaves every other
+        // layer readable, so discovery continues without this document.
+        ctx.logger.warn(`mcp-json: cannot create ${userPath}`)
+        ctx.logger.warn(error)
+      }
+    })
+  }
 
   void enqueue()
 }

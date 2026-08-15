@@ -16,7 +16,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis';
 import z from '@deepseek-ai/schemastery';
-export { DEFAULT_USER_PATH, discover, expandHome, layerSources, readLayer } from './discover.ts';
+export { DEFAULT_USER_PATH, discover, ensureDocument, expandHome, layerSources, readLayer } from './discover.ts';
 export type { Discovery, LayerResult, LayerSource } from './discover.ts';
 export { normalizeDocument } from './dialect.ts';
 export { isDisabled, McpJsonEntryError, toClientConfig } from './map.ts';
@@ -48,6 +48,12 @@ export interface Config {
      * discovery to `userPath` and `<cwd>/.dsh/mcp.json`.
      */
     borrow?: boolean;
+    /**
+     * Whether to create `userPath` with an empty `mcpServers` when it is absent,
+     * so the document to edit always exists (default true). Only this path is
+     * created: the other layers belong to other tools or to a checkout.
+     */
+    createUserPath?: boolean;
     /** Whether to reload when a document changes (default true). */
     watch?: boolean;
     /** Quiet period after a file event before re-reading (default 150ms). */
